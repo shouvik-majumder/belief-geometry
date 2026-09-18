@@ -1,0 +1,12 @@
+# conda env for the belief-geometry project.
+#   conda env create -f environment.yml
+#   conda activate beliefgeom
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   pip install transformer_lens numpy scipy matplotlib pandas tqdm scikit-learn einops jupyter
+# (torch comes from the CUDA 12.8 wheel index, so it is installed with pip, not conda.)
+name: beliefgeom
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
