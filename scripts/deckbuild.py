@@ -5,6 +5,7 @@ Also renders PNG mock-ups of each slide so the layout can be checked without Pow
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -44,6 +45,12 @@ def _textbox(slide, left, top, width, height, text, size, bold=False, colour=BLA
     return box
 
 
+def _est_lines(bullets, size_pt: int) -> int:
+    """Rough wrapped-line count, so the text block is sized and centred correctly."""
+    per_line = 105 if size_pt >= 18 else 125
+    return sum(max(1, math.ceil(len(b) / per_line)) for b in bullets)
+
+
 def _fit(img_path: Path, box_w: float, box_h: float) -> tuple[float, float]:
     with Image.open(img_path) as im:
         w, h = im.size
@@ -77,10 +84,13 @@ class Deck:
         if bullets and image is None:
             bullet_size = max(bullet_size, 18)
         if bullets:
-            h = (0.34 if bullet_size <= 16 else 0.44) * len(bullets) + 0.1
-            _textbox(slide, MARGIN + 0.1, top, SLIDE_W - 2 * MARGIN - 0.2, h, bullets,
+            h = (0.26 if bullet_size <= 16 else 0.32) * _est_lines(bullets, bullet_size) + 0.18
+            # On a text-only slide, centre the block vertically so the slide does not look
+            # top-heavy with a large empty area beneath it.
+            bullets_top = top if image else max(top + 0.3, (SLIDE_H - h) / 2 - 0.3)
+            _textbox(slide, MARGIN + 0.1, bullets_top, SLIDE_W - 2 * MARGIN - 0.2, h, bullets,
                      bullet_size, bullets=True, line_spacing=1.15)
-            top += h + 0.22
+            top = bullets_top + h + 0.22
 
         img_box = None
         if image and not Path(image).exists():
@@ -100,7 +110,8 @@ class Deck:
         if notes:
             slide.notes_slide.notes_text_frame.text = notes
         self.spec.append({"kind": "content", "title": title, "bullets": bullets or [],
-                          "image": str(image) if image else None, "img_box": img_box, "number": n})
+                          "image": str(image) if image else None, "img_box": img_box, "number": n,
+                          "bullets_top": (bullets_top if bullets else None)})
 
     # --------------------------------------------------------------- output
     def save(self, path: str | Path) -> Path:
@@ -158,7 +169,7 @@ class Deck:
                     y += int(ft.size * 1.2)
                 if s["bullets"]:
                     fb = font(18 if not s['img_box'] else 15)
-                    yb = int((TITLE_TOP + TITLE_H + 0.15) * dpi)
+                    yb = int(s.get('bullets_top', TITLE_TOP + TITLE_H + 0.15) * dpi)
                     for b in s["bullets"]:
                         for j, line in enumerate(wrap(d, "\u2022  " + b, fb, W - int(2.2 * MARGIN * dpi))):
                             d.text((int((MARGIN + 0.1) * dpi), yb), line, font=fb, fill="black")
