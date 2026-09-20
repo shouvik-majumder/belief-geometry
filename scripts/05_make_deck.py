@@ -49,7 +49,10 @@ def build() -> Deck:
 
     d.slide("The models learn the processes exactly", image=FIG / "bfig03_training.png",
             bullets=["Cross-entropy reaches the information-theoretic floor to within 0.001 nats.",
-                     "The per-position curve matches the Bayesian staircase, not just its average."])
+                     "RRXOR also matches the Bayesian staircase position by position, not just on average.",
+                     "Mind the axis on the Mess3 panel: its entire dynamic range is 0.01 nats, so that curve is mostly sampling noise."],
+            notes="Mess3 is a weak-evidence process: tracking beliefs buys you almost nothing in loss. "
+                  "That is worth saying out loud, because it foreshadows the control result two slides later.")
 
     d.slide("The fractal is in the residual stream", image=RAW / "geometry_mess3_L4_d64_seed0_layer3_resid_post.png",
             bullets=["A linear map from 64 activation dimensions to the 3 belief coordinates, fitted on half the data and scored on the other half.",
