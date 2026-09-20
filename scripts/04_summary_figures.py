@@ -61,7 +61,7 @@ def load_ckpt(name: str, device: str):
     return model, process, cfg, blob
 
 
-def compute(device: str, n_seq: int, seed: int) -> dict:
+def compute(device: str, n_seq: int, seed: int, eval_n: int = 40000) -> dict:
     """Probe R^2 for each process: every layer of the trained model, plus both controls."""
     results = {}
     for name in CKPTS:
@@ -81,11 +81,32 @@ def compute(device: str, n_seq: int, seed: int) -> dict:
         hist = token_history_features(tokens, process.n_obs, k=6)
         r2_hist = train_test_probe(hist, Y, seed=seed)["r2_test"]
 
+        # Recompute the per-position loss on a much larger evaluation set. With 4k sequences the
+        # standard error per position (~0.008 nats) is as large as Mess3's entire dynamic range
+        # (0.01 nats), so the stored curve looks noisy for reasons that have nothing to do with
+        # the model.
+        import torch.nn.functional as F
+        big = torch.as_tensor(process.sample(int(eval_n), cfg.seq_len, np.random.default_rng(7)),
+                              device=device)
+        per_pos = []
+        with torch.no_grad():
+            for i in range(0, big.shape[0], 4096):
+                chunk = big[i:i + 4096]
+                lg = model(chunk)
+                per_pos.append(F.cross_entropy(lg[:, :-1].reshape(-1, lg.shape[-1]),
+                                               chunk[:, 1:].reshape(-1), reduction="none")
+                               .view(chunk.shape[0], -1).cpu().numpy())
+        per_pos = np.concatenate(per_pos, axis=0)
+        per_position = per_pos.mean(0)
+        per_position_sem = per_pos.std(0, ddof=1) / np.sqrt(per_pos.shape[0])
+
         results[name] = {
             "layers": layers, "model": layers[-1], "untrained": r2_untrained, "token_history": r2_hist,
             "n_states": process.n_states, "n_obs": process.n_obs, "seq_len": cfg.seq_len,
             "eval_loss": blob["history"]["eval_loss"][-1], "optimal_loss": blob["history"]["optimal_loss"],
-            "per_position_loss": blob["history"]["per_position_loss"],
+            "per_position_loss": per_position.tolist(),
+            "per_position_sem": per_position_sem.tolist(),
+            "eval_n": int(eval_n),
             "myopic_entropy": blob["history"]["myopic_entropy"],
             "step": blob["history"]["step"], "loss_curve": blob["history"]["eval_loss"],
             "n_params": blob["n_params"],
@@ -161,11 +182,13 @@ def fig_training(res: dict) -> None:
 
         ax = axes[row, 1]
         pos = np.arange(1, len(r["per_position_loss"]) + 1)
-        ax.plot(pos, r["per_position_loss"], "-o", ms=3, color=DARK, label="transformer")
+        ax.errorbar(pos, r["per_position_loss"], yerr=1.96 * np.array(r["per_position_sem"]),
+                    fmt="-o", ms=3, color=DARK, capsize=2, lw=1, label="transformer")
         ax.plot(pos, np.array(r["myopic_entropy"])[1:], "--s", ms=3, color=ACCENT, label="optimal")
         ax.set_ylabel("cross-entropy (nats)")
-        ax.set_title(f"{name}: loss position by position\n"
-                     f"(final gap {r['eval_loss'] - r['optimal_loss']:+.4f} nats)", fontsize=9)
+        span = max(r["myopic_entropy"][1:]) - min(r["myopic_entropy"][1:])
+        ax.set_title(f"{name}: loss position by position (n={r['eval_n']:,}, 95% CI)\n"
+                     f"note the axis: the whole range here is {span:.3f} nats", fontsize=9)
         if row == 1:
             ax.set_xlabel("token position being predicted")
         ax.legend(fontsize=7.5)
@@ -213,6 +236,7 @@ def main() -> None:
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     ap.add_argument("--n-seq", type=int, default=6000)
     ap.add_argument("--seed", type=int, default=123)
+    ap.add_argument("--eval-n", type=int, default=40000)
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 
@@ -221,7 +245,7 @@ def main() -> None:
         print(f"using cached probe summary ({CACHE.name}); pass --force to recompute")
     else:
         print("computing probe summary...")
-        res = compute(args.device, args.n_seq, args.seed)
+        res = compute(args.device, args.n_seq, args.seed, args.eval_n)
         CACHE.parent.mkdir(exist_ok=True)
         CACHE.write_text(json.dumps(res, indent=2))
 
