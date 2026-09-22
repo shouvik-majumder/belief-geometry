@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bg.msp import SIMPLEX_CORNERS, belief_rgb, msp_cloud, plot_projection  # noqa: E402
+from bg.msp import SIMPLEX_CORNERS, belief_rgb, box_counting_dimension, msp_cloud, plot_projection  # noqa: E402
 from bg.process import PROCESSES  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,12 +79,7 @@ def main() -> None:
 
     # A crude fractal-dimension estimate by box counting, for the record.
     if len(beliefs) > 1000:
-        counts, scales = [], []
-        for n_bins in (8, 16, 32, 64, 128):
-            h, _, _ = np.histogram2d(xy[:, 0], xy[:, 1], bins=n_bins)
-            counts.append((h > 0).sum())
-            scales.append(n_bins)
-        slope = np.polyfit(np.log(scales), np.log(counts), 1)[0]
+        slope = box_counting_dimension(xy)
         print(f"box-counting dimension of the cloud ~= {slope:.2f} (2.00 would fill the triangle)")
 
 

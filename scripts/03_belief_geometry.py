@@ -120,7 +120,8 @@ def main() -> None:
         ax.set_aspect("equal")
     ax.set_title(f"Overlaid, grey = truth (held-out $R^2$ = {fit['r2_test']:.3f})", fontsize=10)
 
-    excess = blob["history"]["loss"][-1] - blob["history"]["optimal_loss"]
+    # eval loss on the fixed 4096-sequence set, not the last training batch (which is noisy)
+    excess = blob["history"]["eval_loss"][-1] - blob["history"]["optimal_loss"]
     fig.suptitle(f"{process.name}: belief geometry in a {cfg.n_layers}-layer, {cfg.d_model}-dim transformer "
                  f"(excess loss {excess:+.4f} nats)", fontsize=12)
     fig.tight_layout()
@@ -129,12 +130,18 @@ def main() -> None:
     print(f"figure -> {out}")
 
     # Layer sweep: where in the network does the belief appear?
-    print("\nlayer sweep (held-out R^2 of the same probe):")
+    print(f"\nlayer sweep (held-out R^2 of the same probe, hook_{args.hook}):")
+    y = process.beliefs_for_tokens(tokens[:2000])[:, 1:].reshape(-1, process.n_states)
+    per_layer = []
     for L in range(cfg.n_layers):
-        a = collect_activations(model, tokens[:2000], layer=L, hook="resid_post")
-        y = process.beliefs_for_tokens(tokens[:2000])[:, 1:].reshape(-1, process.n_states)
-        r2 = train_test_probe(a.reshape(-1, a.shape[-1]), y, seed=args.seed)["r2_test"]
-        print(f"  blocks.{L}.hook_resid_post: {r2:.4f}")
+        a = collect_activations(model, tokens[:2000], layer=L, hook=args.hook)
+        per_layer.append(a.reshape(-1, a.shape[-1]))
+        r2 = train_test_probe(per_layer[-1], y, seed=args.seed)["r2_test"]
+        print(f"  blocks.{L}.hook_{args.hook}: {r2:.4f}")
+    # Shai et al. report that for some processes the belief geometry is spread across layers,
+    # so also probe all layers' residual streams concatenated.
+    r2_cat = train_test_probe(np.concatenate(per_layer, axis=1), y, seed=args.seed)["r2_test"]
+    print(f"  all layers concatenated: {r2_cat:.4f}")
 
 
 if __name__ == "__main__":

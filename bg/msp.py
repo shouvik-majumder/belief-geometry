@@ -102,3 +102,13 @@ def belief_rgb(beliefs: np.ndarray) -> np.ndarray:
     idx = np.array_split(np.arange(n), 3)
     out = np.stack([b[..., i].sum(-1) for i in idx], axis=-1)
     return out / np.clip(out.max(), 1e-12, None)
+
+
+def box_counting_dimension(xy: np.ndarray, bins: tuple[int, ...] = (8, 16, 32, 64, 128)) -> float:
+    """Crude fractal-dimension estimate of a 2D point cloud: slope of log(occupied boxes) against
+    log(boxes per side). 2.0 fills the plane, 1.0 is a curve. With a finite-depth cloud and only
+    five scales this is a rough indicator, not a measurement; report it as approximate.
+    """
+    counts = [(np.histogram2d(xy[:, 0], xy[:, 1], bins=n)[0] > 0).sum() for n in bins]
+    return float(np.polyfit(np.log(bins), np.log(counts), 1)[0])
+
