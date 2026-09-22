@@ -55,21 +55,32 @@ reproduces the ground-truth belief geometry, coloured correctly, at held-out R²
 
 **But the headline number is mostly an illusion, and that is the real lesson.**
 
-| Process | Model residual stream | Untrained model | Raw token history, no network | Layer sweep |
-|---|---|---|---|---|
-| Mess3 | 0.982 | 0.880 | **0.988** | flat: 0.981 at every layer |
-| RRXOR | **0.560** | 0.181 | 0.130 | rising: 0.33 → 0.44 → 0.52 → 0.56 |
+Held-out R^2, mean over three independently trained seeds (range in brackets). Each seed also gets
+its own token sample and probe split. Recomputed by `04_summary_figures.py --force`.
 
-For **Mess3** a linear function of the last few one-hot tokens predicts the belief state *better*
-than the trained network's activations do, and the probe scores the same at layer 0 as at layer 3.
-The belief update for Mess3 is close to an exponentially decaying token count, so the geometry is
-nearly free from the input. The picture is real, but it is weak evidence that the network computes
-anything.
+| Process | Model, last layer | Model, all 4 layers concatenated | Untrained model | Raw token history, no network | Layer sweep |
+|---|---|---|---|---|---|
+| Mess3 | 0.980 [0.976-0.983] | 0.992 [0.990-0.993] | 0.895 [0.881-0.905] | **0.988** [0.988-0.988] | flat: 0.98 at every layer |
+| RRXOR | 0.547 [0.523-0.563] | **0.712** [0.685-0.735] | 0.184 [0.177-0.189] | 0.132 [0.128-0.135] | rising: 0.32 -> 0.42 -> 0.50 -> 0.55 |
+
+For **Mess3** a linear function of the last few one-hot tokens predicts the belief state about as
+well as the trained network does: slightly better than any single layer, slightly worse than all
+layers stacked together. And the probe scores the same at layer 0 as at layer 3. The belief update
+for Mess3 is close to an exponentially decaying token count, so the geometry is nearly free from
+the input. The picture is real, but it is weak evidence that the network computes anything.
+(An earlier version of this README said the raw history "beats" the model, from one seed and the
+last layer only. "Matches" is what three seeds and the concatenated probe support.)
 
 For **RRXOR**, where the third token is the XOR of the previous two, no weighted token count can
-work. The no-network baseline collapses to 0.13, the model reaches 0.56, and the probe improves
-monotonically with depth. That rising profile is the signature of a quantity being *built* layer
-by layer, which is what "the model represents the belief state" should mean.
+work. The no-network baseline collapses to 0.13, the model reaches 0.55 at the last layer, and the
+probe improves monotonically with depth. That rising profile is the signature of a quantity being
+*built* layer by layer, which is what "the model represents the belief state" should mean.
+
+**RRXOR's belief state is spread across layers.** Probing all four residual streams at once lifts
+R^2 from 0.55 to 0.71, in every seed. So the last-layer 0.55 was not a ceiling: part of the belief
+is carried in earlier layers and not copied forward. Shai et al. report a similar layer-distributed
+representation for RRXOR and probe concatenated layers for it. Mess3 gains almost nothing from concatenation (0.98 -> 0.99),
+consistent with its geometry being available from the input at every depth.
 
 Takeaway worth carrying to every future probing experiment: **a probe result means nothing without
 a baseline that shares the probe's access to the input.** Ask "compared to what?" before believing
@@ -92,9 +103,9 @@ data/checkpoints/  trained models and loss histories
 Ordered roughly by effort. Items 1 to 3 are self-contained experiments; 4 to 6 are open enough to
 become a workshop paper.
 
-1. **Why is RRXOR's R² only 0.56?** Is the rest non-linearly encoded, is the model using a
-   different sufficient statistic, or is the probe the limiting factor? Try a two-layer MLP probe
-   and compare: a big gap means non-linear encoding, no gap means the information is absent.
+1. **What is the remaining RRXOR variance?** Concatenating layers takes R² from 0.55 to 0.71.
+   Is the rest non-linearly encoded, or absent? Try a two-layer MLP probe on the concatenated
+   streams: a big gap means non-linear encoding, no gap means the information is not there.
 2. **When does the geometry appear during training?** Save checkpoints every 100 steps and plot
    probe R² against step next to the loss curve. Does the geometry form before, during, or after
    the loss drops?

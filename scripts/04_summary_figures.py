@@ -26,7 +26,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from bg.model import TrainConfig, build_model, collect_activations  # noqa: E402
-from bg.msp import SIMPLEX_CORNERS, belief_rgb, msp_cloud, to_simplex_xy  # noqa: E402
+from bg.msp import (SIMPLEX_CORNERS, belief_rgb, box_counting_dimension,  # noqa: E402
+                    msp_cloud, to_simplex_xy)
 from bg.probe import token_history_features, train_test_probe  # noqa: E402
 from bg.process import PROCESSES  # noqa: E402
 
@@ -41,7 +42,8 @@ plt.rcParams.update({
     "figure.facecolor": "white", "savefig.facecolor": "white",
 })
 GREY, DARK, ACCENT = "0.65", "0.25", "#1f77b4"
-CKPTS = {"mess3": "mess3_L4_d64_seed0.pt", "rrxor": "rrxor_L4_d64_seed0.pt"}
+PROCESS_NAMES = ("mess3", "rrxor")
+SEEDS = (0, 1, 2)   # independently trained models per process; seed 0 is the one in the figures
 
 
 def save(fig, name: str) -> None:
@@ -51,8 +53,9 @@ def save(fig, name: str) -> None:
     print(f"  -> {name}")
 
 
-def load_ckpt(name: str, device: str):
-    blob = torch.load(ROOT / "data" / "checkpoints" / CKPTS[name], map_location="cpu", weights_only=False)
+def load_ckpt(name: str, device: str, seed: int = 0):
+    path = ROOT / "data" / "checkpoints" / f"{name}_L4_d64_seed{seed}.pt"
+    blob = torch.load(path, map_location="cpu", weights_only=False)
     cfg = TrainConfig(**blob["cfg"]); cfg.device = device
     pi = blob["process"]
     process = PROCESSES[pi["name"]](pi["x"], pi["alpha"]) if pi["name"] == "mess3" else PROCESSES[pi["name"]]()
@@ -62,24 +65,34 @@ def load_ckpt(name: str, device: str):
 
 
 def compute(device: str, n_seq: int, seed: int, eval_n: int = 40000) -> dict:
-    """Probe R^2 for each process: every layer of the trained model, plus both controls."""
+    """Probe R^2 for each process: every layer of the trained model, all layers concatenated,
+    and both controls, repeated for each independently trained seed (each seed also gets its own
+    fresh token sample and probe split, so the spread covers model, data and split variation)."""
     results = {}
-    for name in CKPTS:
-        model, process, cfg, blob = load_ckpt(name, device)
-        rng = np.random.default_rng(seed)
-        tokens = process.sample(n_seq, cfg.seq_len, rng)
-        Y = process.beliefs_for_tokens(tokens)[:, 1:].reshape(-1, process.n_states)
+    for name in PROCESS_NAMES:
+        per_seed = []
+        for s in SEEDS:
+            model_s, process, cfg_s, _ = load_ckpt(name, device, s)
+            tokens = process.sample(n_seq, cfg_s.seq_len, np.random.default_rng(seed + s))
+            Y = process.beliefs_for_tokens(tokens)[:, 1:].reshape(-1, process.n_states)
+            acts = [collect_activations(model_s, tokens, layer=L, hook="resid_post").reshape(len(Y), -1)
+                    for L in range(cfg_s.n_layers)]
+            layers_s = [train_test_probe(a, Y, seed=seed + s)["r2_test"] for a in acts]
+            concat_s = train_test_probe(np.concatenate(acts, axis=1), Y, seed=seed + s)["r2_test"]
+            untrained = build_model(cfg_s, n_vocab=process.n_obs)      # same init as the trained seed
+            au = collect_activations(untrained, tokens, layer=cfg_s.n_layers - 1, hook="resid_post")
+            untr_s = train_test_probe(au.reshape(len(Y), -1), Y, seed=seed + s)["r2_test"]
+            hist_s = train_test_probe(token_history_features(tokens, process.n_obs, k=6), Y,
+                                      seed=seed + s)["r2_test"]
+            per_seed.append({"layers": layers_s, "concat": concat_s, "untrained": untr_s,
+                             "token_history": hist_s})
+            print(f"    {name} seed {s}: model {layers_s[-1]:.4f} | concat {concat_s:.4f} | "
+                  f"untrained {untr_s:.4f} | token history {hist_s:.4f}")
 
-        layers = []
-        for L in range(cfg.n_layers):
-            a = collect_activations(model, tokens, layer=L, hook="resid_post")
-            layers.append(train_test_probe(a.reshape(-1, a.shape[-1]), Y, seed=seed)["r2_test"])
-
-        untrained = build_model(cfg, n_vocab=process.n_obs)
-        au = collect_activations(untrained, tokens, layer=cfg.n_layers - 1, hook="resid_post")
-        r2_untrained = train_test_probe(au.reshape(-1, au.shape[-1]), Y, seed=seed)["r2_test"]
-        hist = token_history_features(tokens, process.n_obs, k=6)
-        r2_hist = train_test_probe(hist, Y, seed=seed)["r2_test"]
+        model, process, cfg, blob = load_ckpt(name, device, 0)
+        layers = np.mean([p["layers"] for p in per_seed], axis=0).tolist()
+        stat = lambda k: [p[k] for p in per_seed]
+        r2_untrained, r2_hist = float(np.mean(stat("untrained"))), float(np.mean(stat("token_history")))
 
         # Recompute the per-position loss on a much larger evaluation set. With 4k sequences the
         # standard error per position (~0.008 nats) is as large as Mess3's entire dynamic range
@@ -102,6 +115,11 @@ def compute(device: str, n_seq: int, seed: int, eval_n: int = 40000) -> dict:
 
         results[name] = {
             "layers": layers, "model": layers[-1], "untrained": r2_untrained, "token_history": r2_hist,
+            "concat": float(np.mean(stat("concat"))), "seeds": list(SEEDS), "per_seed": per_seed,
+            "layers_per_seed": [p["layers"] for p in per_seed],
+            "model_per_seed": [p["layers"][-1] for p in per_seed],
+            "untrained_per_seed": stat("untrained"), "token_history_per_seed": stat("token_history"),
+            "concat_per_seed": stat("concat"),
             "n_states": process.n_states, "n_obs": process.n_obs, "seq_len": cfg.seq_len,
             "eval_loss": blob["history"]["eval_loss"][-1], "optimal_loss": blob["history"]["optimal_loss"],
             "per_position_loss": per_position.tolist(),
@@ -111,8 +129,9 @@ def compute(device: str, n_seq: int, seed: int, eval_n: int = 40000) -> dict:
             "step": blob["history"]["step"], "loss_curve": blob["history"]["eval_loss"],
             "n_params": blob["n_params"],
         }
-        print(f"  {name}: model {layers[-1]:.3f} | untrained {r2_untrained:.3f} | "
-              f"token history {r2_hist:.3f} | layers {np.round(layers, 3)}")
+        print(f"  {name} (mean of {len(SEEDS)} seeds): model {layers[-1]:.4f} | "
+              f"concat {results[name]['concat']:.4f} | untrained {r2_untrained:.4f} | "
+              f"token history {r2_hist:.4f} | layers {np.round(layers, 3)}")
     return results
 
 
@@ -151,7 +170,9 @@ def fig_msp() -> None:
     ax.plot(tri[:, 0], tri[:, 1], color="0.8", lw=1)
     ax.scatter(xy[:, 0], xy[:, 1], s=0.5, c=belief_rgb(mess["beliefs"]), alpha=0.6, linewidths=0)
     ax.set_aspect("equal"); ax.axis("off")
-    ax.set_title(f"Mess3: {len(xy):,} reachable beliefs\nfractal, box-counting dimension ~1.46", fontsize=9)
+    dim = box_counting_dimension(xy)
+    ax.set_title(f"Mess3: {len(xy):,} reachable beliefs\n"
+                 f"fractal, rough box-counting dimension ~{dim:.2f}", fontsize=9)
 
     rr = msp_cloud(PROCESSES["rrxor"](), depth=12)
     b = rr["beliefs"]
@@ -202,15 +223,22 @@ def fig_controls(res: dict) -> None:
     x = np.arange(len(groups)); w = 0.36
     for i, (name, colour) in enumerate((("mess3", GREY), ("rrxor", ACCENT))):
         vals = [res[name][k] for k in keys]
-        ax.bar(x + (i - 0.5) * w, vals, w, color=colour, edgecolor=DARK, label=name)
+        spread = [np.array(res[name][f"{k}_per_seed"]) for k in keys]
+        err = np.array([[v - s.min(), s.max() - v] for v, s in zip(vals, spread)]).T
+        ax.bar(x + (i - 0.5) * w, vals, w, color=colour, edgecolor=DARK, label=name,
+               yerr=err, capsize=3, error_kw={"lw": 1, "ecolor": DARK})
         for xi, v in zip(x + (i - 0.5) * w, vals):
-            ax.text(xi, v + 0.015, f"{v:.2f}", ha="center", fontsize=8)
+            ax.text(xi, v + 0.03, f"{v:.2f}", ha="center", fontsize=8)
     ax.set_xticks(x); ax.set_xticklabels(groups, fontsize=8.5)
     ax.set_ylabel("held-out $R^2$ of a linear probe\nfor the belief state")
-    ax.set_ylim(0, 1.12)
+    ax.set_ylim(0, 1.15)
     ax.legend(fontsize=8)
-    ax.set_title("The same probe, three sources of information\n"
-                 "For Mess3 the no-network control WINS: the geometry is free from the input.", fontsize=9.5)
+    m = res["mess3"]
+    # "beats" only if raw history exceeds the network even with all layers concatenated
+    verb = ("beats" if min(m["token_history_per_seed"]) > max(m["concat_per_seed"]) else "matches")
+    ax.set_title("The same probe, three sources of information (bars: mean, whiskers: range over "
+                 f"{len(m['seeds'])} seeds)\nFor Mess3 the no-network control {verb} the trained "
+                 "network: the geometry is nearly free from the input.", fontsize=9)
     save(fig, "bfig04_controls.png")
 
 
@@ -218,15 +246,21 @@ def fig_layers(res: dict) -> None:
     fig, ax = plt.subplots(figsize=(6, 3.6))
     for name, colour, marker in (("mess3", GREY, "o"), ("rrxor", ACCENT, "s")):
         r = res[name]
+        per = np.array(r["layers_per_seed"])
+        ax.fill_between(range(per.shape[1]), per.min(0), per.max(0), color=colour, alpha=0.2, lw=0)
         ax.plot(range(len(r["layers"])), r["layers"], f"-{marker}", color=colour, ms=5, label=f"{name}: model")
+        ax.plot(len(r["layers"]) - 0.6, r["concat"], marker, mfc="none", mec=colour, ms=7, mew=1.5)
+        ax.text(len(r["layers"]) - 0.6, r["concat"] - 0.07, "all\nlayers", fontsize=6.5,
+                color=colour, ha="center", va="top")
         ax.axhline(r["token_history"], color=colour, ls=":", lw=1.2)
         ax.text(len(r["layers"]) - 1.02, r["token_history"] + 0.02, f"{name}: no-network control",
                 fontsize=7.5, color=colour, ha="right")
     ax.set_xticks(range(len(res["mess3"]["layers"])))
+    ax.set_xlim(-0.3, len(res["mess3"]["layers"]) - 0.2)
     ax.set_xlabel("transformer block (residual stream after the block)")
     ax.set_ylabel("held-out $R^2$")
     ax.set_ylim(0, 1.08)
-    ax.legend(fontsize=8, loc="center right")
+    ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(0.02, 0.8))
     ax.set_title("Where does the belief state get built?\nFlat = copied from the input. Rising = computed.", fontsize=9.5)
     save(fig, "bfig05_layers.png")
 
