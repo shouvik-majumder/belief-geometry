@@ -11,9 +11,10 @@ RTX 3090, there are no downloads, no gated weights and no API calls.
 
 ## Setup
 
-```powershell
+```bash
+git clone https://github.com/shouvik-majumder/belief-geometry.git
+cd belief-geometry
 conda activate beliefgeom
-cd D:\dev\belief-geometry
 python scripts/00_process_check.py
 ```
 
@@ -121,3 +122,7 @@ become a workshop paper.
 6. **The control paper.** The Mess3-versus-RRXOR contrast above is a small but genuine
    methodological result. Quantifying "how much belief geometry is free from the input" across a
    family of processes would be a useful short paper on its own.
+
+## License
+
+MIT; see [LICENSE](LICENSE).
