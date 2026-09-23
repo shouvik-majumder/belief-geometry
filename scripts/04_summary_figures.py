@@ -156,7 +156,7 @@ def fig_trajectory(seed: int = 3) -> None:
         ax.annotate(str(t), (x, y), textcoords="offset points", xytext=(6, 4), fontsize=7, color=DARK)
     ax.set_aspect("equal"); ax.axis("off")
     ax.set_title("A belief state is a point in the triangle.\nEach token moves it. "
-                 f"(one sequence, tokens {list(tokens[0][:12])})", fontsize=9)
+                 f"(one sequence, tokens {[int(t) for t in tokens[0][:12]]})", fontsize=9)
     save(fig, "bfig01_trajectory.png")
 
 
