@@ -4,3 +4,4 @@ data/checkpoints/
 figures/
 .ipynb_checkpoints/
 ~$*
+data/*.log
