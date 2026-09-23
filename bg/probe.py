@@ -11,9 +11,10 @@ which tells you nothing about how the model uses it. A *linear* readout is the o
 of the network can actually perform cheaply, so a good linear fit is evidence that the belief is
 represented, not merely recoverable.
 
-Two controls are included, because a probe with no control is a story, not a result:
-  shuffle    fit the same probe to shuffled labels (destroys any real relationship)
-  untrained  fit the same probe to a randomly initialised model's activations
+Three controls are included, because a probe with no control is a story, not a result:
+  shuffle        fit the same probe to shuffled labels (destroys any real relationship)
+  untrained      fit the same probe to a randomly initialised model's activations
+  token history  fit it to one-hot recent tokens, with no network at all
 """
 from __future__ import annotations
 

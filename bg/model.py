@@ -1,9 +1,8 @@
 """A tiny transformer, trained from scratch, plus the training loop.
 
 We use TransformerLens' `HookedTransformer` rather than plain PyTorch for one reason: it gives
-`run_with_cache`, which hands you every internal activation by name (`blocks.3.hook_resid_post`
-and friends). That is the standard tool in mechanistic interpretability, and the naming
-convention is the same one you already met in the Gemma Scope SAE work.
+`run_with_cache`, which returns every internal activation by name (`blocks.3.hook_resid_post`
+and friends), the standard naming convention in mechanistic interpretability.
 
 The models here are deliberately minuscule (about 200k parameters). They train in minutes on a
 3090 and still reach the information-theoretic floor for the process, which is the point: the
@@ -127,7 +126,7 @@ def collect_activations(model: HookedTransformer, tokens: np.ndarray, layer: int
     """Run the model and return one activation vector per (sequence, position).
 
     layer=None means the last layer. The default hook `resid_post` is the residual stream after a
-    block, the same place the ESR project steered and the same place Gemma Scope SAEs are trained.
+    block.
     Returns [n_seq, seq_len, d_model] as a numpy array.
     """
     layer = model.cfg.n_layers - 1 if layer is None else layer

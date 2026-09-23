@@ -1,7 +1,8 @@
 __pycache__/
 *.pyc
 data/checkpoints/
-figures/
+figures/*
+!figures/summary/
 .ipynb_checkpoints/
 ~$*
 data/*.log

@@ -1,4 +1,4 @@
-"""Generate every figure used in the belief-geometry summary deck.
+"""Generate the summary figures (written to figures/summary/).
 
 Runs the probe analysis for both processes across all layers and all controls, caches the
 numbers, and draws the figures. Defaults to CPU because the models are tiny (201k parameters),
@@ -31,7 +31,7 @@ from bg.msp import (SIMPLEX_CORNERS, belief_rgb, box_counting_dimension,  # noqa
 from bg.probe import token_history_features, train_test_probe  # noqa: E402
 from bg.process import PROCESSES  # noqa: E402
 
-OUT = ROOT / "figures" / "deck"
+OUT = ROOT / "figures" / "summary"
 OUT.mkdir(parents=True, exist_ok=True)
 CACHE = ROOT / "data" / "probe_summary.json"
 
@@ -155,8 +155,8 @@ def fig_trajectory(seed: int = 3) -> None:
     for t, (x, y) in enumerate(xy):
         ax.annotate(str(t), (x, y), textcoords="offset points", xytext=(6, 4), fontsize=7, color=DARK)
     ax.set_aspect("equal"); ax.axis("off")
-    ax.set_title("A belief state is a point in the triangle.\nEach token moves it. "
-                 f"(one sequence, tokens {[int(t) for t in tokens[0][:12]]})", fontsize=9)
+    ax.set_title("Belief trajectory of one Mess3 sequence\n"
+                 f"tokens {' '.join(str(int(t)) for t in tokens[0][:12])}", fontsize=9)
     save(fig, "bfig01_trajectory.png")
 
 
@@ -172,7 +172,7 @@ def fig_msp() -> None:
     ax.set_aspect("equal"); ax.axis("off")
     dim = box_counting_dimension(xy)
     ax.set_title(f"Mess3: {len(xy):,} reachable beliefs\n"
-                 f"fractal, rough box-counting dimension ~{dim:.2f}", fontsize=9)
+                 f"box-counting dimension ~{dim:.2f}", fontsize=9)
 
     rr = msp_cloud(PROCESSES["rrxor"](), depth=12)
     b = rr["beliefs"]
@@ -184,7 +184,7 @@ def fig_msp() -> None:
     ax.set_aspect("equal")
     ax.set_xlabel("belief PC1"); ax.set_ylabel("belief PC2")
     ax.set_title(f"RRXOR: {len(np.unique(np.round(b, 6), axis=0))} distinct beliefs\n"
-                 "discrete, 5 states so shown as PCA", fontsize=9)
+                 "first two principal components", fontsize=9)
     save(fig, "bfig02_msp.png")
 
 
@@ -207,9 +207,7 @@ def fig_training(res: dict) -> None:
                     fmt="-o", ms=3, color=DARK, capsize=2, lw=1, label="transformer")
         ax.plot(pos, np.array(r["myopic_entropy"])[1:], "--s", ms=3, color=ACCENT, label="optimal")
         ax.set_ylabel("cross-entropy (nats)")
-        span = max(r["myopic_entropy"][1:]) - min(r["myopic_entropy"][1:])
-        ax.set_title(f"{name}: loss position by position (n={r['eval_n']:,}, 95% CI)\n"
-                     f"note the axis: the whole range here is {span:.3f} nats", fontsize=9)
+        ax.set_title(f"{name}: loss by token position (n={r['eval_n']:,}, 95% CI)", fontsize=9)
         if row == 1:
             ax.set_xlabel("token position being predicted")
         ax.legend(fontsize=7.5)
@@ -234,11 +232,8 @@ def fig_controls(res: dict) -> None:
     ax.set_ylim(0, 1.15)
     ax.legend(fontsize=8)
     m = res["mess3"]
-    # "beats" only if raw history exceeds the network even with all layers concatenated
-    verb = ("beats" if min(m["token_history_per_seed"]) > max(m["concat_per_seed"]) else "matches")
-    ax.set_title("The same probe, three sources of information (bars: mean, whiskers: range over "
-                 f"{len(m['seeds'])} seeds)\nFor Mess3 the no-network control {verb} the trained "
-                 "network: the geometry is nearly free from the input.", fontsize=9)
+    ax.set_title("Linear belief probe by information source "
+                 f"(mean, range over {len(m['seeds'])} seeds)", fontsize=9)
     save(fig, "bfig04_controls.png")
 
 
@@ -261,7 +256,7 @@ def fig_layers(res: dict) -> None:
     ax.set_ylabel("held-out $R^2$")
     ax.set_ylim(0, 1.08)
     ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(0.02, 0.8))
-    ax.set_title("Where does the belief state get built?\nFlat = copied from the input. Rising = computed.", fontsize=9.5)
+    ax.set_title("Linear belief probe by depth", fontsize=9.5)
     save(fig, "bfig05_layers.png")
 
 
