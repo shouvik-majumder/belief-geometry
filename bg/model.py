@@ -1,12 +1,12 @@
-"""A tiny transformer, trained from scratch, plus the training loop.
+"""A small transformer, trained from scratch, plus the training loop.
 
-We use TransformerLens' `HookedTransformer` rather than plain PyTorch for one reason: it gives
-`run_with_cache`, which returns every internal activation by name (`blocks.3.hook_resid_post`
-and friends), the standard naming convention in mechanistic interpretability.
+TransformerLens' `HookedTransformer` is used because `run_with_cache` returns every internal
+activation by name (`blocks.3.hook_resid_post` and so on), the standard naming convention in
+mechanistic interpretability.
 
-The models here are deliberately minuscule (about 200k parameters). They train in minutes on a
-3090 and still reach the information-theoretic floor for the process, which is the point: the
-task is hard in a mathematical sense, not a scale sense.
+The models are small (about 200k parameters). They train in minutes on one GPU and reach the
+information-theoretic floor for the process; the task is hard in a mathematical sense rather
+than a scale sense.
 """
 from __future__ import annotations
 

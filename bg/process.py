@@ -1,6 +1,6 @@
 """Hidden Markov processes, belief states, and optimal prediction.
 
-The whole project rests on one idea. A *hidden Markov process* emits tokens you can see while
+A *hidden Markov process* emits tokens you can see while
 hopping between states you cannot. To predict the next token as well as possible, you must track
 a probability distribution over which state the process is in right now, given everything you
 have seen. That distribution is the **belief state**.
@@ -156,7 +156,7 @@ def mess3(x: float = 0.15, alpha: float = 0.6) -> HMMProcess:
 
     So every token is weak, noisy evidence about the current state. Beliefs never collapse to
     certainty, they keep getting nudged around the simplex, and the set of beliefs you can reach
-    is self-similar: a fractal. That is what makes it such a good test image for interpretability.
+    is self-similar: a fractal, which makes it a useful test case for interpretability.
     """
     beta = (1.0 - alpha) / 2.0
     stay = 1.0 - 2.0 * x
@@ -187,7 +187,7 @@ def z1r() -> HMMProcess:
 def rrxor() -> HMMProcess:
     """Random-Random-XOR: emit two fair coin flips, then their XOR, forever. 5 states, 2 tokens.
 
-    This is the important counterexample to Mess3. To predict the third token you must remember
+    This is the contrasting case to Mess3. To predict the third token you must remember
     the first two *and combine them nonlinearly* (XOR). No weighted count of recent tokens can do
     that, so the "raw token history" control fails here while a real state-tracker succeeds.
 

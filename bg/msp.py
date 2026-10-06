@@ -89,9 +89,8 @@ def unique_beliefs(beliefs: np.ndarray, decimals: int = 6) -> np.ndarray:
 def belief_rgb(beliefs: np.ndarray) -> np.ndarray:
     """Colour each belief by its own coordinates: state 0 -> red, 1 -> green, 2 -> blue.
 
-    This is the trick that makes the comparison convincing later. If the transformer's activations
-    carry the belief, colouring its points this way reproduces the same colour pattern as the
-    ground-truth fractal, not just the same silhouette.
+    If the transformer's activations carry the belief, colouring its points this way reproduces
+    the colour pattern of the ground-truth fractal as well as its silhouette.
     """
     b = np.clip(np.asarray(beliefs, dtype=float), 0, 1)
     if b.shape[-1] == 3:

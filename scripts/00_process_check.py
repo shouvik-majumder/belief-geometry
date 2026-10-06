@@ -1,8 +1,7 @@
 """Step 0: check the process itself, before any neural network is involved.
 
-Nothing here needs a GPU. The point is to convince yourself the probability machinery is right,
-so that later, when the transformer's activations do or do not match, you know the fault is not
-in the maths.
+Nothing here needs a GPU. It checks the probability machinery, so that a later mismatch with
+the transformer's activations cannot be attributed to the maths.
 
   python scripts/00_process_check.py
 """

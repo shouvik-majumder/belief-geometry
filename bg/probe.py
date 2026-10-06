@@ -11,7 +11,7 @@ which tells you nothing about how the model uses it. A *linear* readout is the o
 of the network can actually perform cheaply, so a good linear fit is evidence that the belief is
 represented, not merely recoverable.
 
-Three controls are included, because a probe with no control is a story, not a result:
+Three controls are included:
   shuffle        fit the same probe to shuffled labels (destroys any real relationship)
   untrained      fit the same probe to a randomly initialised model's activations
   token history  fit it to one-hot recent tokens, with no network at all
@@ -46,7 +46,7 @@ def train_test_probe(X: np.ndarray, Y: np.ndarray, test_frac: float = 0.2, seed:
     """Same, but fitted on one half of the data and scored on the other.
 
     With 64 activation dimensions and tens of thousands of points overfitting is not a real
-    worry here, but reporting held-out R^2 is the habit worth having.
+    worry here, but held-out R^2 is reported.
     """
     rng = np.random.default_rng(seed)
     idx = rng.permutation(len(X))
@@ -74,17 +74,16 @@ def shuffle_control(X: np.ndarray, Y: np.ndarray, seed: int = 0, **kw) -> float:
 
 
 def token_history_features(tokens: np.ndarray, n_vocab: int, k: int = 6) -> np.ndarray:
-    """The control that matters: features built from the raw input, with no network at all.
+    """Features built from the raw input, with no network at all.
 
     For each position we one-hot encode the last `k` tokens (each at its own offset) plus the
-    position index. A linear probe on these says how much of the belief state is trivially
+    position index. A linear probe on these says how much of the belief state is linearly
     available from the input itself.
 
-    Why this is the crucial control: for Mess3 the belief update is close to an exponentially
-    decaying count of recent tokens, so a linear function of recent one-hot tokens already
-    approximates it well. If this baseline scores as high as the model's residual stream, a high
-    probe R^2 on the model tells you almost nothing about what the model computes. Always ask
-    "compared to what?" before believing a probe.
+    For Mess3 the belief update is close to an exponentially decaying count of recent tokens, so
+    a linear function of recent one-hot tokens already approximates it well. If this baseline
+    scores as high as the model's residual stream, a high probe R^2 on the model says little
+    about what the model computes.
 
     tokens: [B, L] -> features [B * L, k * n_vocab + L]
     """
