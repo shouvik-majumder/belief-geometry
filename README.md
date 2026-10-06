@@ -8,7 +8,7 @@ A re-implementation of
 written for learning and experimenting. It is not the authors' code and is not affiliated with
 them; see the paper for the original work.
 
-## What it does
+## Overview
 
 A transformer trained to predict the next token of a hidden Markov process should, if it is
 optimal, track the Bayesian *belief state*: the posterior over the process's hidden states. This
